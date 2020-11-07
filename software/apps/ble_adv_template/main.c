@@ -17,7 +17,7 @@
 #include "opt3004.h"
 
 // Create a timer
-APP_TIMER_DEF(adv_timer);
+// APP_TIMER_DEF(adv_timer);
 
 // I2C manager
 NRF_TWI_MNGR_DEF(twi_mngr_instance, 5, 0);
@@ -26,7 +26,7 @@ NRF_TWI_MNGR_DEF(twi_mngr_instance, 5, 0);
 static simple_ble_config_t ble_config = {
         // c0:98:e5:49:xx:xx
         .platform_id       = 0x49,    // used as 4th octect in device BLE address
-        .device_id         = 0x0000,  // TODO: replace with your lab bench number
+        .device_id         = 0x5354,  // TODO: replace with your lab bench number
         .adv_name          = "EE149", // Note that this name is not displayed to save room in the advertisement for data.
         .adv_interval      = MSEC_TO_UNITS(1000, UNIT_0_625_MS),
         .min_conn_interval = MSEC_TO_UNITS(500, UNIT_1_25_MS),
@@ -64,6 +64,7 @@ int main(void) {
   error_code = nrf_twi_mngr_init(&twi_mngr_instance, &i2c_config);
   APP_ERROR_CHECK(error_code);
 
+  /*
   opt3004_config_t config = {
     .range_number = OPT3004_AUTORANGE,
     .conversion_time = OPT3004_CONVERSION_100MS,
@@ -79,18 +80,24 @@ int main(void) {
   opt3004_continuous();
 
   printf("opt3004 initialized: %ld\n", error_code);
-
+  */
 
   // Setup BLE
   simple_ble_app = simple_ble_init(&ble_config);
 
-  // TODO replace this with advertisement sending light data
-  simple_ble_adv_only_name();
+  // simple_ble_adv_only_name();
+  unsigned char payload[24] = {0};
+  payload[0] = 1;
+  payload[1] = 3;
+  payload[2] = 5;
+  simple_ble_adv_manuf_data(payload, 3);
 
   // Set a timer to read the light sensor and update advertisement data every second.
+  /*
   app_timer_init();
   app_timer_create(&adv_timer, APP_TIMER_MODE_REPEATED, (app_timer_timeout_handler_t) light_timer_callback);
   app_timer_start(adv_timer, APP_TIMER_TICKS(1000), NULL); // 1000 milliseconds
+  */
 
   while(1) {
     // Sleep while SoftDevice handles BLE
