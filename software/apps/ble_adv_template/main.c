@@ -37,22 +37,68 @@ static simple_ble_config_t ble_config = {
         .max_conn_interval = MSEC_TO_UNITS(1000, UNIT_1_25_MS),
 };
 
+struct tilt
+{
+  float theta;
+  float psi;
+  float phi;
+};
+
+/*
 void light_timer_callback() {
     printf("Light timer fired!\n");
     // TODO: implement this function!
     // Use Simple BLE function to read light sensor and put data in advertisement
 }
+*/
 
-float read_tilt(){
+void read_tilt(struct tilt *result){
 	lsm9ds1_measurement_t g = lsm9ds1_read_accelerometer();
 	float x_val = g.x_axis;
  	float y_val = g.y_axis;
  	float z_val = g.z_axis;
 
- 	float psi = atan(y_val/sqrt(x_val*x_val + z_val*z_val)) * 180/ M_PI;
+ 	result->psi = atan(y_val/sqrt(x_val*x_val + z_val*z_val)) * 180/ M_PI;
+  result->theta = atan(x_val/sqrt(y_val*y_val + z_val*z_val)) * 180/ M_PI;
+}
 
- 	return psi;
+/*
+ * Get wheel speed from accel
+ */
+#define X_DEADZ 10
+#define Y_DEADZ 10
+#define SPEED_OFFS 40
+#define CAP 150
+void get_ws(struct tilt *tilt, int *ws_L, int* ws_R)
+{
+  // Forward / backward
+  if (fabs(tilt->psi) < Y_DEADZ) {
+    *ws_L = 0;
+    *ws_R = 0;
+  } else {
+    *ws_L = ((int) floor(tilt->psi)) * 2;
+    *ws_R = *ws_L;
+  }
+  // Turn left / right
+  if (fabs(tilt->theta) < X_DEADZ) {
+    // Don't turn
+  } else {
+    *ws_L += ((int) floor(tilt->theta)) * 2;
+    *ws_R -= ((int) floor(tilt->theta)) * 2;
+  }
+  if (abs(*ws_L) > CAP) *ws_L = CAP;
+  if (abs(*ws_R) > CAP) *ws_R = CAP;
+}
 
+/*
+ * Display data on LCD
+ */
+void display_ws(struct tilt *tilt, int ws_L, int ws_R) {
+  char buf[16] = {0};
+  snprintf(buf, 16, "L:%d  R:%d", ws_L, ws_R);
+	display_write(buf, DISPLAY_LINE_1);
+  snprintf(buf, 16, "Y:%d  X:%d", (int)tilt->psi, (int)tilt->theta);
+	display_write(buf, DISPLAY_LINE_0);
 }
 
 
@@ -66,6 +112,9 @@ int main(void) {
   ret_code_t error_code = NRF_SUCCESS;
 
   // Initialize
+  struct tilt tilt_angle;
+  int ws_L = 0;
+  int ws_R = 0;
 
   // initialize RTT library
   error_code = NRF_LOG_INIT(NULL);
@@ -81,6 +130,25 @@ int main(void) {
   error_code = nrf_twi_mngr_init(&twi_mngr_instance, &i2c_config);
   APP_ERROR_CHECK(error_code);
   lsm9ds1_init(&twi_mngr_instance);
+
+  // initialize display
+  nrf_drv_spi_t spi_instance = NRF_DRV_SPI_INSTANCE(1);
+  nrf_drv_spi_config_t spi_config = {
+    .sck_pin = BUCKLER_LCD_SCLK,
+    .mosi_pin = BUCKLER_LCD_MOSI,
+    .miso_pin = BUCKLER_LCD_MISO,
+    .ss_pin = BUCKLER_LCD_CS,
+    .irq_priority = NRFX_SPI_DEFAULT_CONFIG_IRQ_PRIORITY,
+    .orc = 0,
+    .frequency = NRF_DRV_SPI_FREQ_4M,
+    .mode = NRF_DRV_SPI_MODE_2,
+    .bit_order = NRF_DRV_SPI_BIT_ORDER_MSB_FIRST
+  };
+  error_code = nrf_drv_spi_init(&spi_instance, &spi_config, NULL, NULL);
+  APP_ERROR_CHECK(error_code);
+  display_init(&spi_instance);
+  printf("Display initialized!\n");
+  display_write("INIT", DISPLAY_LINE_0);
 
   /*
   opt3004_config_t config = {
@@ -102,10 +170,7 @@ int main(void) {
 
   // Setup BLE
   simple_ble_app = simple_ble_init(&ble_config);
-
-  // simple_ble_adv_only_name();
   unsigned char payload[24] = {0};
-  int y_tilt = 0;
 
   // Set a timer to read the light sensor and update advertisement data every second.
   /*
@@ -115,10 +180,19 @@ int main(void) {
   */
 
   while(1) {
-  	y_tilt = floor(read_tilt());
-  	payload[0] = floor((y_tilt / 10));
-  	payload[1] = (y_tilt % 10);
-  	simple_ble_adv_manuf_data(payload, 2);
+
+    // read tilt
+    read_tilt(&tilt_angle);
+    // printf("Xt: %d,  Yt: %d\n", (int)tilt_angle.theta, (int)tilt_angle.psi);
+    get_ws(&tilt_angle, &ws_L, &ws_R);
+    // printf("L: %d,  R: %d\n", ws_L, ws_R);
+    display_ws(&tilt_angle, ws_L, ws_R);
+
+  	payload[0] = abs(ws_L);
+  	payload[1] = (ws_L < 0) ? 1 : 0;
+    payload[2] = abs(ws_R);
+  	payload[3] = (ws_R < 0) ? 1 : 0;
+  	simple_ble_adv_manuf_data(payload, 4);
    
     nrf_delay_ms(100);
     // Sleep while SoftDevice handles BLE
