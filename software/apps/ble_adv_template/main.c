@@ -4,15 +4,19 @@
 
 #include <stdbool.h>
 #include <stdint.h>
+#include <math.h>
 #include "nrf.h"
 #include "app_util.h"
 #include "nrf_twi_mngr.h"
+#include "nrf_delay.h"
 #include "nrf_log.h"
 #include "nrf_log_ctrl.h"
 #include "nrf_log_default_backends.h"
 
 #include "buckler.h"
 #include "simple_ble.h"
+#include "display.h"
+#include "lsm9ds1.h"
 
 #include "opt3004.h"
 
@@ -38,6 +42,19 @@ void light_timer_callback() {
     // TODO: implement this function!
     // Use Simple BLE function to read light sensor and put data in advertisement
 }
+
+float read_tilt(){
+	lsm9ds1_measurement_t g = lsm9ds1_read_accelerometer();
+	float x_val = g.x_axis;
+ 	float y_val = g.y_axis;
+ 	float z_val = g.z_axis;
+
+ 	float psi = atan(y_val/sqrt(x_val*x_val + z_val*z_val)) * 180/ M_PI;
+
+ 	return psi;
+
+}
+
 
 /*******************************************************************************
  *   State for this application
@@ -87,10 +104,7 @@ int main(void) {
 
   // simple_ble_adv_only_name();
   unsigned char payload[24] = {0};
-  payload[0] = 1;
-  payload[1] = 3;
-  payload[2] = 5;
-  simple_ble_adv_manuf_data(payload, 3);
+  int y_tilt = 0;
 
   // Set a timer to read the light sensor and update advertisement data every second.
   /*
@@ -100,8 +114,14 @@ int main(void) {
   */
 
   while(1) {
+  	y_tilt = (int) read_tilt();
+  	payload[0] = (y_tilt % 10);
+  	payload[1] = (int) (y_tilt / 10);
+  	simple_ble_adv_manuf_data(payload, 3);
+   
+    nrf_delay_ms(100);
     // Sleep while SoftDevice handles BLE
-    power_manage();
+    //power_manage();
   }
 }
 
