@@ -80,6 +80,7 @@ int main(void) {
   i2c_config.frequency = NRF_TWIM_FREQ_100K;
   error_code = nrf_twi_mngr_init(&twi_mngr_instance, &i2c_config);
   APP_ERROR_CHECK(error_code);
+  lsm9ds1_init(&twi_mngr_instance);
 
   /*
   opt3004_config_t config = {
@@ -114,10 +115,10 @@ int main(void) {
   */
 
   while(1) {
-  	y_tilt = (int) read_tilt();
-  	payload[0] = (y_tilt % 10);
-  	payload[1] = (int) (y_tilt / 10);
-  	simple_ble_adv_manuf_data(payload, 3);
+  	y_tilt = floor(read_tilt());
+  	payload[0] = floor((y_tilt / 10));
+  	payload[1] = (y_tilt % 10);
+  	simple_ble_adv_manuf_data(payload, 2);
    
     nrf_delay_ms(100);
     // Sleep while SoftDevice handles BLE
