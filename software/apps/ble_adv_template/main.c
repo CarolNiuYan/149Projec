@@ -83,8 +83,8 @@ void get_ws(struct tilt *tilt, int *ws_L, int* ws_R)
   if (fabs(tilt->theta) < X_DEADZ) {
     // Don't turn
   } else {
-    *ws_L += ((int) floor(tilt->theta)) * 2;
-    *ws_R -= ((int) floor(tilt->theta)) * 2;
+    *ws_L -= ((int) floor(tilt->theta)) * 2;
+    *ws_R += ((int) floor(tilt->theta)) * 2;
   }
   if (abs(*ws_L) > CAP) *ws_L = CAP;
   if (abs(*ws_R) > CAP) *ws_R = CAP;
