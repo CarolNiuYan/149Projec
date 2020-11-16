@@ -246,6 +246,9 @@ int main(void) {
         }
         break;
       }
+      default: {
+        state = OFF;
+      }
     }
   }
 }

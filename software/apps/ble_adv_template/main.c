@@ -62,12 +62,41 @@ void read_tilt(struct tilt *result){
   result->theta = atan(x_val/sqrt(y_val*y_val + z_val*z_val)) * 180/ M_PI;
 }
 
+void read_tilt_avg(struct tilt *result){
+  static float x_val_0;
+  static float x_val_1;
+  static float x_val_2;
+  static float y_val_0;
+  static float y_val_1;
+  static float y_val_2;
+  static float z_val_0;
+  static float z_val_1;
+  static float z_val_2;
+
+  lsm9ds1_measurement_t g = lsm9ds1_read_accelerometer();
+  x_val_2 = x_val_1;
+  x_val_1 = x_val_0;
+  x_val_0 = g.x_axis;
+  y_val_2 = y_val_1;
+  y_val_1 = y_val_0;
+  y_val_0 = g.y_axis;
+  z_val_2 = z_val_1;
+  z_val_1 = z_val_0;
+  z_val_0 = g.z_axis;
+
+  float x_val = (x_val_2 + x_val_1 + x_val_0) / 3.0;
+  float y_val = (y_val_2 + y_val_1 + y_val_0) / 3.0;
+  float z_val = (z_val_2 + z_val_1 + z_val_0) / 3.0;
+
+  result->psi = atan(y_val/sqrt(x_val*x_val + z_val*z_val)) * 180/ M_PI;
+  result->theta = atan(x_val/sqrt(y_val*y_val + z_val*z_val)) * 180/ M_PI;
+}
+
 /*
  * Get wheel speed from accel
  */
 #define X_DEADZ 10
 #define Y_DEADZ 10
-#define SPEED_OFFS 40
 #define CAP 150
 void get_ws(struct tilt *tilt, int *ws_L, int* ws_R)
 {
@@ -76,7 +105,7 @@ void get_ws(struct tilt *tilt, int *ws_L, int* ws_R)
     *ws_L = 0;
     *ws_R = 0;
   } else {
-    *ws_L = ((int) floor(tilt->psi)) * 2;
+    *ws_L = ((int) floor(tilt->psi)) * 3;
     *ws_R = *ws_L;
   }
   // Turn left / right
@@ -86,8 +115,46 @@ void get_ws(struct tilt *tilt, int *ws_L, int* ws_R)
     *ws_L -= ((int) floor(tilt->theta)) * 2;
     *ws_R += ((int) floor(tilt->theta)) * 2;
   }
-  if (abs(*ws_L) > CAP) *ws_L = CAP;
-  if (abs(*ws_R) > CAP) *ws_R = CAP;
+  *ws_R = (*ws_R) > CAP ? CAP : (((*ws_R) < -CAP) ? -CAP : *ws_R);
+  *ws_L = (*ws_L) > CAP ? CAP : (((*ws_L) < -CAP) ? -CAP : *ws_L);
+}
+#undef X_DEADZ
+#undef Y_DEADZ
+
+/*
+ * Get wheel speed from accel (Smoothed version)
+ */
+#define X_DEADZ 10
+#define Y_DEADZ 10
+#define X_MULT  3
+#define Y_MULT  4
+void get_ws_smooth(struct tilt *tilt, int *ws_L, int* ws_R)
+{
+  // Forward / backward
+  if (fabs(tilt->psi) <= Y_DEADZ) {
+    *ws_L = 0;
+  } else if (tilt->psi > 0) {
+    // Forwrd
+    *ws_L = ((int) floor(tilt->psi - Y_DEADZ)) * Y_MULT;
+  } else {
+    // Backward
+    *ws_L = ((int) floor(tilt->psi + Y_DEADZ)) * Y_MULT;
+  }
+  *ws_R = *ws_L;
+  // Turn left / right
+  if (fabs(tilt->theta) <= X_DEADZ) {
+    // Don't turn
+  } else if (tilt->theta > 0) {
+    // Turn left
+    *ws_L -= ((int) floor(tilt->theta - X_DEADZ)) * X_MULT;
+    *ws_R += ((int) floor(tilt->theta - X_DEADZ)) * X_MULT;
+  } else {
+    // Turn right
+    *ws_L -= ((int) floor(tilt->theta + X_DEADZ)) * X_MULT;
+    *ws_R += ((int) floor(tilt->theta + X_DEADZ)) * X_MULT;
+  }
+  *ws_R = (*ws_R) > CAP ? CAP : (((*ws_R) < -CAP) ? -CAP : *ws_R);
+  *ws_L = (*ws_L) > CAP ? CAP : (((*ws_L) < -CAP) ? -CAP : *ws_L);
 }
 
 /*
@@ -182,9 +249,9 @@ int main(void) {
   while(1) {
 
     // read tilt
-    read_tilt(&tilt_angle);
+    read_tilt_avg(&tilt_angle);
     // printf("Xt: %d,  Yt: %d\n", (int)tilt_angle.theta, (int)tilt_angle.psi);
-    get_ws(&tilt_angle, &ws_L, &ws_R);
+    get_ws_smooth(&tilt_angle, &ws_L, &ws_R);
     // printf("L: %d,  R: %d\n", ws_L, ws_R);
     display_ws(&tilt_angle, ws_L, ws_R);
 
