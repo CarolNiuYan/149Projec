@@ -44,10 +44,14 @@
 #define NRFX_TIMER_ENABLED 1
 #define NRFX_TIMER0_ENABLED 1
 #define NRFX_TIMER1_ENABLED 1
+#define NRFX_TIMER2_ENABLED 1 // added by azamat
+#define NRFX_TIMER3_ENABLED 1 // added by azamat
 #define TIMER_ENABLED 1
 #define TIMER_DEFAULT_CONFIG_BIT_WIDTH 3
 #define TIMER0_ENABLED 1
 #define TIMER1_ENABLED 1
+#define TIMER2_ENABLED 1 // added by azamat
+#define TIMER3_ENABLED 1 // added by azamat
 #define APP_TIMER_ENABLED 1
 #define APP_TIMER_KEEPS_RTC_ACTIVE 1
 
