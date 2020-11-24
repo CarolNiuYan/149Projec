@@ -27,8 +27,7 @@
 #include "kobukiUtilities.h"
 #include "lsm9ds1.h"
 #include "simple_ble.h"
-
-#define MAX_WS 130
+#include "gpio.h"
 
 // I2C manager
 NRF_TWI_MNGR_DEF(twi_mngr_instance, 5, 0);
@@ -39,8 +38,8 @@ int ws_L = 0;
 int ws_R = 0;
 
 typedef enum {
-  GRIP_OPEN = 3,       // this is actually 2.5 which corresponds to 0.5ms
-  GRIP_CLOSE = 12,     // corresponds to 2.4ms
+  GRIP_OPEN = 2,       // this is actually 2.5 which corresponds to 0.5ms
+  GRIP_CLOSE = 11,     // corresponds to 2.4ms
   LIFT_RAISE = 5,      // corresponds to 1ms
   LIFT_LOWER = 9,      // this is actully 9.5 which corresponds to 1.9ms
   PIVOT_UP = 9,        // this is actully 9.5 which corresponds to 1.9ms
@@ -48,7 +47,7 @@ typedef enum {
 } robot_state_t;
 
 APP_PWM_INSTANCE(PWM2,2);
-int GRIP_DEFAULT = GRIP_OPEN;
+int GRIP_DEFAULT = GRIP_CLOSE;
 int PIVOT_DEFAULT = PIVOT_UP;
 int LIFT_DEFAULT = LIFT_RAISE;
 // APP_PWM_INSTANCE(PWM2,1);
@@ -108,7 +107,7 @@ void down_pivot_servo(){
     while (app_pwm_channel_duty_set(&PWM2, 1, PIVOT_DEFAULT)== NRF_ERROR_BUSY);
     nrf_delay_ms(20);
   }
-  while (app_pwm_channel_duty_set(&PWM2, 1, PIVOT_DEFAULT)== NRF_ERROR_BUSY);
+  while (app_pwm_channel_duty_set(&PWM2, 1, 0)== NRF_ERROR_BUSY);
   
 }
 // GRIP_SERVO
@@ -117,9 +116,9 @@ void open_grip_servo(){
     printf("opening--> pulse_value: %dus\n", GRIP_DEFAULT*200 );
     GRIP_DEFAULT -= 1;
     while (app_pwm_channel_duty_set(&PWM2, 1, GRIP_DEFAULT)== NRF_ERROR_BUSY);
-    nrf_delay_ms(20);
+    nrf_delay_ms(200);
   }
-  while (app_pwm_channel_duty_set(&PWM2, 1, GRIP_DEFAULT)== NRF_ERROR_BUSY);
+  while (app_pwm_channel_duty_set(&PWM2, 1, 0)== NRF_ERROR_BUSY);
   
 }
 void close_grip_servo(){
@@ -127,9 +126,9 @@ void close_grip_servo(){
     printf("closing--> pulse_value: %dus\n", GRIP_DEFAULT*200 );
     GRIP_DEFAULT += 1;
     while (app_pwm_channel_duty_set(&PWM2, 1, GRIP_DEFAULT)== NRF_ERROR_BUSY);
-    nrf_delay_ms(20);
+    nrf_delay_ms(200);
   }
-  while (app_pwm_channel_duty_set(&PWM2, 1, GRIP_DEFAULT)== NRF_ERROR_BUSY);
+  while (app_pwm_channel_duty_set(&PWM2, 1, 0)== NRF_ERROR_BUSY);
 }
 
 int main(void) {
@@ -168,21 +167,9 @@ int main(void) {
   display_init(&spi_instance);
   printf("Display initialized!\n");
 
-  // initialize i2c master (two wire interface)
-  nrf_drv_twi_config_t i2c_config = NRF_DRV_TWI_DEFAULT_CONFIG;
-  i2c_config.scl = BUCKLER_SENSORS_SCL;
-  i2c_config.sda = BUCKLER_SENSORS_SDA;
-  i2c_config.frequency = NRF_TWIM_FREQ_100K;
-  error_code = nrf_twi_mngr_init(&twi_mngr_instance, &i2c_config);
-  APP_ERROR_CHECK(error_code);
-  lsm9ds1_init(&twi_mngr_instance);
-  printf("IMU initialized!\n");
   
-  // initialize Kobuki
-  kobukiInit();
-  ws_L = 0;
-  ws_R = 0;
-  printf("Kobuki initialized!\n");
+  gpio_config(19, INPUT);
+  gpio_set(19);
 
   app_pwm_config_t pwm2_config = {
   .pins ={BUCKLER_LED0, BUCKLER_LED1},
@@ -205,11 +192,13 @@ int main(void) {
     // read sensors from robot
     lower_lift_servo();
     open_grip_servo();
-    nrf_delay_ms(40);   // increase this delay when testing !!!!!
+    printf("gpio read value %d,",gpio_read(19));
+    nrf_delay_ms(2000);   // increase this delay when testing !!!!!
     printf(" after open GRIP_DEFAULT %d,LIFT_DEFAULT %d\n",PIVOT_DEFAULT,LIFT_DEFAULT );
     raise_lift_servo();
     close_grip_servo();
-    nrf_delay_ms(40); //  increase this delay !!!!!!!
+    printf("gpio read value %d,",gpio_read(19));
+    nrf_delay_ms(2000); //  increase this delay !!!!!!!
     printf(" after close GRIP_DEFAULT %d,LIFT_DEFAULT %d\n",GRIP_DEFAULT,LIFT_DEFAULT );
   }
 }
