@@ -38,12 +38,12 @@ int ws_L = 0;
 int ws_R = 0;
 
 typedef enum {
-  GRIP_OPEN = 2,       // this is actually 2.5 which corresponds to 0.5ms
-  GRIP_CLOSE = 11,     // corresponds to 2.4ms
-  LIFT_RAISE = 5,      // corresponds to 1ms
-  LIFT_LOWER = 9,      // this is actully 9.5 which corresponds to 1.9ms
-  PIVOT_UP = 9,        // this is actully 9.5 which corresponds to 1.9ms
-  PIVOT_DOWN = 6,      // corresponds to 1.2ms 
+  GRIP_OPEN = 2,       // TODO this is actually 2.5 which corresponds to 0.5ms
+  GRIP_CLOSE = 11,     // TODO corresponds to 2.4ms
+  LIFT_RAISE = 50,      // corresponds to 1ms
+  LIFT_LOWER = 90,      // corresponds to 1.8ms (1.9ms is wiping the floor)
+  PIVOT_UP = 95,        // corresponds to 1.9ms
+  PIVOT_DOWN = 70,      // corresponds to 1.4ms (1.2ms is fighting against lifter)
 } robot_state_t;
 
 APP_PWM_INSTANCE(PWM2,2);
@@ -72,7 +72,7 @@ void funny_function(uint32_t pwm_id)    // PWM callback function
 // LIFT_SERVO
 void raise_lift_servo(){
   while(LIFT_DEFAULT > LIFT_RAISE){
-    printf("raising--> pulse_value: %dus\n", LIFT_DEFAULT*200 );
+    printf("raising--> pulse_value: %dus\n", LIFT_DEFAULT*20 );
     LIFT_DEFAULT -= 1;
     while (app_pwm_channel_duty_set(&PWM2, 0, LIFT_DEFAULT)== NRF_ERROR_BUSY);
     nrf_delay_ms(20);
@@ -82,7 +82,7 @@ void raise_lift_servo(){
 }
 void lower_lift_servo(){
   while(LIFT_DEFAULT < LIFT_LOWER){
-    printf("lowering--> pulse_value: %dus\n", LIFT_DEFAULT*200  );
+    printf("lowering--> pulse_value: %dus\n", LIFT_DEFAULT*20  );
     LIFT_DEFAULT += 1;
     while (app_pwm_channel_duty_set(&PWM2, 0, LIFT_DEFAULT)== NRF_ERROR_BUSY);
     nrf_delay_ms(20);
@@ -107,7 +107,7 @@ void down_pivot_servo(){
     while (app_pwm_channel_duty_set(&PWM2, 1, PIVOT_DEFAULT)== NRF_ERROR_BUSY);
     nrf_delay_ms(20);
   }
-  while (app_pwm_channel_duty_set(&PWM2, 1, 0)== NRF_ERROR_BUSY);
+  while (app_pwm_channel_duty_set(&PWM2, 1, PIVOT_DEFAULT)== NRF_ERROR_BUSY);
   
 }
 // GRIP_SERVO
@@ -175,7 +175,7 @@ int main(void) {
   .pins ={BUCKLER_LED0, BUCKLER_LED1},
   .pin_polarity = {APP_PWM_POLARITY_ACTIVE_HIGH, APP_PWM_POLARITY_ACTIVE_HIGH},
   .num_of_channels = 2,
-  .period_us = 20000,
+  .period_us = 2000,
   };
 
 
@@ -191,15 +191,17 @@ int main(void) {
     //nrf_delay_ms(500);
     // read sensors from robot
     lower_lift_servo();
-    open_grip_servo();
-    printf("gpio read value %d,",gpio_read(19));
+    up_pivot_servo();
+    //open_grip_servo();
+    //printf("gpio read value %d,",gpio_read(19));
     nrf_delay_ms(2000);   // increase this delay when testing !!!!!
-    printf(" after open GRIP_DEFAULT %d,LIFT_DEFAULT %d\n",PIVOT_DEFAULT,LIFT_DEFAULT );
+    //printf(" after open GRIP_DEFAULT %d,LIFT_DEFAULT %d\n",PIVOT_DEFAULT,LIFT_DEFAULT );
     raise_lift_servo();
-    close_grip_servo();
-    printf("gpio read value %d,",gpio_read(19));
+    down_pivot_servo();
+    //close_grip_servo();
+    //printf("gpio read value %d,",gpio_read(19));
     nrf_delay_ms(2000); //  increase this delay !!!!!!!
-    printf(" after close GRIP_DEFAULT %d,LIFT_DEFAULT %d\n",GRIP_DEFAULT,LIFT_DEFAULT );
+    //printf(" after close GRIP_DEFAULT %d,LIFT_DEFAULT %d\n",GRIP_DEFAULT,LIFT_DEFAULT );
   }
 }
 
