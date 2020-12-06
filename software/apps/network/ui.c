@@ -29,11 +29,11 @@ void init_home(int port_num){
 
   
   // Print waiting message
-  move(++start_row, 0);
+  //move(++start_row, 0);
   printf("Waiting for connection. . . ");
 
   // Refresh the display
-  refresh();
+  //refresh();
 }
 
 
@@ -49,7 +49,7 @@ void* read_input(void* stat){
  * Show a game over message & winner information, and wait for a key press.
  */
 void end_game(int winner) {
-  erase();
-  refresh();
-  timeout(-1);
+  //erase();
+  //refresh();
+  //timeout(-1);
 }

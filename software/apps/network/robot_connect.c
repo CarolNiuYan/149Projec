@@ -50,9 +50,9 @@ int main (int argc, char** argv) {
       // Initialize the home game
       open_control_room(&server_port, &server_socket_fd);
 
+      printf("Try to init home\n");
       // Initialize the home game display
       init_home(server_port);
-      //try_this(3);
       // Accept connection
       accept_connection(server_socket_fd, &socket_fd);
   }
