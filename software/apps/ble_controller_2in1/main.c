@@ -151,7 +151,9 @@ void get_ws_smooth(struct tilt *tilt, int *ws_L, int* ws_R)
 }
 #undef X_DEADZ
 #undef Y_DEADZ
+#undef CAP
 
+#if 0  //Not used for now
 /*
  * Arm parameters
  * XXX Kept in Sync with Robot's code 
@@ -198,6 +200,31 @@ void get_arm_pos(struct tilt *tilt, int *arm_lift, int* arm_tilt)
   if (*arm_tilt > TILT_UP_PWM) *arm_tilt = TILT_UP_PWM;
   if (*arm_tilt < TILT_DOWN_PWM) *arm_tilt = TILT_DOWN_PWM;
 }
+#endif
+
+/*
+ * Get arm speed (in ticks) from tilt
+ */
+#define X_DEADZ 10
+#define Y_DEADZ 10
+#define CAP 200
+void get_as(struct tilt *tilt, int* as_lift, int* as_tilt)
+{
+  // Lift
+  if (fabs(tilt->psi) < Y_DEADZ) {
+    *as_lift = 0;
+  } else {
+    *as_lift = ((int) floor(tilt->psi)) * 3;
+  }
+  // Tilt
+  if (fabs(tilt->theta) < X_DEADZ) {
+    *as_tilt = 0;
+  } else {
+    *as_tilt = ((int) floor(tilt->theta)) * 2;
+  }
+  *as_lift = (*as_lift) > CAP ? CAP : (((*as_lift) < -CAP) ? -CAP : *as_lift);
+  *as_tilt = (*as_tilt) > CAP ? CAP : (((*as_tilt) < -CAP) ? -CAP : *as_tilt);
+}
 
 /*
  * Display data on LCD
@@ -232,8 +259,10 @@ int main(void) {
   struct tilt tilt_angle;
   int ws_L = 0;
   int ws_R = 0;
-  int arm_lift = arm_lift_neutral;
-  int arm_tilt = arm_tilt_neutral;
+  //int arm_lift = arm_lift_neutral;
+  //int arm_tilt = arm_tilt_neutral;
+  int as_lift = 0;
+  int as_tilt = 0;
   gpio_config(22, INPUT);
 
   // initialize RTT library
@@ -272,7 +301,7 @@ int main(void) {
 
 
   // Setup BLE
-  #define BLE_ADV_SIZE 10
+  #define BLE_ADV_SIZE 16
   simple_ble_app = simple_ble_init(&ble_config);
   unsigned char payload[BLE_ADV_SIZE] = {0};
   for (int i=0; i<BLE_ADV_SIZE; i++) {
@@ -301,13 +330,22 @@ int main(void) {
       payload[4] = abs(ws_R);
       payload[5] = (ws_R < 0) ? 1 : 0;
     } else {
-      get_arm_pos(&tilt_angle, &arm_lift, &arm_tilt);
-      display_arm(&tilt_angle, arm_lift, arm_tilt, 0);
-      payload[7] = arm_lift;
-      payload[8] = arm_tilt;
+      /*
+       * (Not used)
+        get_arm_pos(&tilt_angle, &arm_lift, &arm_tilt);
+        display_arm(&tilt_angle, arm_lift, arm_tilt, 0);
+        payload[7] = arm_lift;
+        payload[8] = arm_tilt;
+      */
+      get_as(&tilt_angle, &as_lift, &as_tilt);
+      display_arm(&tilt_angle, as_lift, as_tilt, 0);
       payload[9] = 0;
+      payload[10] = abs(as_lift);
+      payload[11] = (as_lift < 0) ? 1 : 0;
+      payload[12] = abs(as_tilt);
+      payload[13] = (as_tilt < 0) ? 1 : 0; 
     }
-    simple_ble_adv_manuf_data(&payload[2], BLE_ADV_SIZE);
+    simple_ble_adv_manuf_data(&payload[2], BLE_ADV_SIZE - 2);
     nrf_delay_ms(100);
   }
 }

@@ -32,4 +32,12 @@ typedef enum {
   PERIOD_PWM = 2000,
 } arm_state_pwm_t;
 
+#define TICK_MULT 160
+typedef enum {
+  LIFT_RAISE_TICK = LIFT_RAISE_PWM * TICK_MULT,
+  LIFT_LOWER_TICK = LIFT_LOWER_PWM * TICK_MULT,
+  TILT_UP_TICK = TILT_UP_PWM * TICK_MULT,
+  TILT_DOWN_TICK = TILT_DOWN_PWM * TICK_MULT,
+} arm_state_tick_t;
+
 #endif /* STATES_H_ */

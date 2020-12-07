@@ -46,8 +46,10 @@ int ws_R = 0;
 int arm_tilt = (TILT_UP_PWM + TILT_DOWN_PWM) / 2;
 int arm_lift = (LIFT_RAISE_PWM + LIFT_LOWER_PWM) / 2;
 int arm_grip = 0;
-int curr_arm_tilt;
-int curr_arm_lift;
+int as_lift = 0;
+int as_tilt = 0;
+uint16_t curr_arm_tilt;
+uint16_t curr_arm_lift;
 
 // BLE configuration
 // This is mostly irrelevant since we are scanning only
@@ -70,24 +72,39 @@ APP_PWM_INSTANCE(PWM2,2);
 void funny_function(uint32_t pwm_id) { /*Do nothing*/ }
 
 
-// PWM functions
+// Arm Actions
 void lift_to_pwm(int pwm) {
   if (!pwm) {
     while (app_pwm_channel_duty_set(&PWM2, 0, 0) == NRF_ERROR_BUSY);
     return;
   }
-  if (curr_arm_lift < pwm) curr_arm_lift++;
-  else if (curr_arm_lift > pwm) curr_arm_lift--;
-  while (app_pwm_channel_duty_set(&PWM2, 0, curr_arm_lift) == NRF_ERROR_BUSY);
+  if (curr_arm_lift < pwm * TICK_MULT) curr_arm_lift+=100;
+  else if (curr_arm_lift > pwm * TICK_MULT) curr_arm_lift-=100;
+  while (app_pwm_channel_duty_ticks_set(&PWM2, 0, curr_arm_lift) == NRF_ERROR_BUSY);
 }
 void tilt_to_pwm(int pwm) {
   if (!pwm) {
     while (app_pwm_channel_duty_set(&PWM2, 1, 0) == NRF_ERROR_BUSY);
     return;
   }
-  if (curr_arm_tilt < pwm) curr_arm_tilt++;
-  else if (curr_arm_tilt > pwm) curr_arm_tilt--;
-  while (app_pwm_channel_duty_set(&PWM2, 1, curr_arm_tilt) == NRF_ERROR_BUSY);
+  if (curr_arm_tilt < pwm * TICK_MULT) curr_arm_tilt+=100;
+  else if (curr_arm_tilt > pwm * TICK_MULT) curr_arm_tilt-=100;
+  while (app_pwm_channel_duty_ticks_set(&PWM2, 1, curr_arm_tilt) == NRF_ERROR_BUSY);
+}
+
+void lift_move(int arm_speed) {
+  curr_arm_lift += arm_speed;
+  if (curr_arm_lift < LIFT_RAISE_TICK || curr_arm_lift > LIFT_LOWER_TICK) {
+    curr_arm_lift -= arm_speed;
+  }
+  while (app_pwm_channel_duty_ticks_set(&PWM2, 0, curr_arm_lift) == NRF_ERROR_BUSY);
+}
+void tilt_move(int arm_speed) {
+  curr_arm_tilt += arm_speed;
+  if (curr_arm_tilt < TILT_DOWN_TICK || curr_arm_tilt > TILT_UP_TICK) {
+    curr_arm_tilt -= arm_speed;
+  }
+  while (app_pwm_channel_duty_ticks_set(&PWM2, 1, curr_arm_tilt) == NRF_ERROR_BUSY);
 } 
 
 
@@ -160,12 +177,17 @@ void ble_evt_adv_report(ble_evt_t const* p_ble_evt) {
      * payload[3] = LW_dir
      * payload[4] = RW_speed,
      * payload[5] = RW_dir
-     * payload[6] = N/A
-     * payload[7] = Lift_PWM
-     * payload[8] = Tilt_PWM
+     * payload[6] = Switch (Not used)
+     * payload[7] = Lift_PWM (Not used)
+     * payload[8] = Tilt_PWM (Not used)
      * payload[9] = Gripper_bool
-     * payload[10] = Lift_tick_diff
-     * payload[11] = Tilt_tilt_diff
+     * payload[10] = Lift_speed_tick
+     * payload[11] = Lift_speed_dir
+     * payload[12] = Tilt_speed_tick
+     * payload[13] = Tilt_speed_dir
+     */
+    /*
+     * Driving
      */
     if (payload[2] < 255) {
       ws_L = payload[2];
@@ -177,6 +199,11 @@ void ble_evt_adv_report(ble_evt_t const* p_ble_evt) {
       if (ws_R > MAX_WS) ws_R = MAX_WS;
       if (payload[5]) ws_R = -ws_R;
     }
+
+    /*
+     * Arm actions
+     */
+    /* (Not used)
     if (payload[7] < 255) {
       arm_lift = payload[7];
       if (arm_lift < LIFT_RAISE_PWM) arm_lift = LIFT_RAISE_PWM;
@@ -187,8 +214,17 @@ void ble_evt_adv_report(ble_evt_t const* p_ble_evt) {
       if (arm_tilt < TILT_DOWN_PWM) arm_tilt = TILT_DOWN_PWM;
       else if (arm_tilt > TILT_UP_PWM) arm_tilt = TILT_UP_PWM;
     }
+    */
     if (payload[9] < 255) {
       arm_grip = payload[9];
+    }
+    if (payload[10] < 255 && payload[7] == 255) {
+      as_lift = payload[10];
+      if (payload[11]) as_lift = -as_lift;
+    }
+    if (payload[12] < 255 && payload[8] == 255) {
+      as_tilt = payload[12];
+      if (payload[13]) as_tilt = -as_tilt;
     }
   }
 }
@@ -208,7 +244,10 @@ void update_display(void) {
   }
   snprintf(buf, 16, "%s  L:%d R:%d", state_str, ws_L, ws_R);
 	display_write(buf, DISPLAY_LINE_0);
-  snprintf(buf, 16, "L:%d T:%d G:%d", arm_lift, arm_tilt, arm_grip);
+  snprintf(buf, 16, "L:%d T:%d G:%d",
+           curr_arm_lift / TICK_MULT,
+           curr_arm_tilt / TICK_MULT,
+           arm_grip);
 	display_write(buf, DISPLAY_LINE_1);
 }
 
@@ -292,13 +331,16 @@ int main(void) {
   error_code = app_pwm_init(&PWM2, &pwm2_config, funny_function);
   APP_ERROR_CHECK(error_code);
   app_pwm_enable(&PWM2);
+  printf("Checking tick cycles\n");
+  ASSERT(app_pwm_cycle_ticks_get(&PWM2) == TICK_MULT * 100);
+  printf("PWM generator Inited!\n");
 
   // Init arm location
   arm_tilt = (TILT_UP_PWM + TILT_DOWN_PWM) / 2;
   arm_lift = (LIFT_RAISE_PWM + LIFT_LOWER_PWM) / 2;
   arm_grip = 0;
-  curr_arm_tilt = arm_tilt;
-  curr_arm_lift = arm_lift;
+  curr_arm_tilt = arm_tilt * TICK_MULT;
+  curr_arm_lift = arm_lift * TICK_MULT;
 
 
   // loop forever, running state machine
@@ -332,8 +374,12 @@ int main(void) {
           state = DRIVING;
           // perform state-specific actions here
           kobukiDriveDirect(ws_L, ws_R);
+          lift_move(as_lift);
+          tilt_move(as_tilt);
+          /* (not used)
           lift_to_pwm(arm_lift);
           tilt_to_pwm(arm_tilt);
+          */
         }
         break;
       }
