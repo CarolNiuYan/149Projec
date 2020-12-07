@@ -7,6 +7,7 @@
 #include <stdint.h>
 #include <stdio.h>
 
+#include "app_pwm.h"
 #include "app_util.h"
 #include "app_error.h"
 #include "app_timer.h"
@@ -38,9 +39,15 @@
 NRF_TWI_MNGR_DEF(twi_mngr_instance, 5, 0);
 
 // global variables
+states state = OFF;
 KobukiSensors_t sensors = {0};
 int ws_L = 0;
 int ws_R = 0;
+int arm_tilt = (TILT_UP_PWM + TILT_DOWN_PWM) / 2;
+int arm_lift = (LIFT_RAISE_PWM + LIFT_LOWER_PWM) / 2;
+int arm_grip = 0;
+int curr_arm_tilt;
+int curr_arm_lift;
 
 // BLE configuration
 // This is mostly irrelevant since we are scanning only
@@ -54,6 +61,35 @@ static simple_ble_config_t ble_config = {
         .max_conn_interval = MSEC_TO_UNITS(1000, UNIT_1_25_MS), // irrelevant if advertising only
 };
 simple_ble_app_t* simple_ble_app;
+
+
+
+// PWM generator instance
+APP_PWM_INSTANCE(PWM2,2);
+// PWM callback function
+void funny_function(uint32_t pwm_id) { /*Do nothing*/ }
+
+
+// PWM functions
+void lift_to_pwm(int pwm) {
+  if (!pwm) {
+    while (app_pwm_channel_duty_set(&PWM2, 0, 0) == NRF_ERROR_BUSY);
+    return;
+  }
+  if (curr_arm_lift < pwm) curr_arm_lift++;
+  else if (curr_arm_lift > pwm) curr_arm_lift--;
+  while (app_pwm_channel_duty_set(&PWM2, 0, curr_arm_lift) == NRF_ERROR_BUSY);
+}
+void tilt_to_pwm(int pwm) {
+  if (!pwm) {
+    while (app_pwm_channel_duty_set(&PWM2, 1, 0) == NRF_ERROR_BUSY);
+    return;
+  }
+  if (curr_arm_tilt < pwm) curr_arm_tilt++;
+  else if (curr_arm_tilt > pwm) curr_arm_tilt--;
+  while (app_pwm_channel_duty_set(&PWM2, 1, curr_arm_tilt) == NRF_ERROR_BUSY);
+} 
+
 
 
 /*
@@ -124,32 +160,55 @@ void ble_evt_adv_report(ble_evt_t const* p_ble_evt) {
      * payload[3] = LW_dir
      * payload[4] = RW_speed,
      * payload[5] = RW_dir
+     * payload[6] = N/A
+     * payload[7] = Lift_PWM
+     * payload[8] = Tilt_PWM
+     * payload[9] = Gripper_bool
+     * payload[10] = Lift_tick_diff
+     * payload[11] = Tilt_tilt_diff
      */
-    ws_L = payload[2];
-    if (ws_L > MAX_WS) ws_L = MAX_WS;
-    if (payload[3]) ws_L = -ws_L;
-    ws_R = payload[4];
-    if (ws_R > MAX_WS) ws_R = MAX_WS;
-    if (payload[5]) ws_R = -ws_R;
+    if (payload[2] < 255) {
+      ws_L = payload[2];
+      if (ws_L > MAX_WS) ws_L = MAX_WS;
+      if (payload[3]) ws_L = -ws_L;
+    }
+    if (payload[4] < 255) {
+      ws_R = payload[4];
+      if (ws_R > MAX_WS) ws_R = MAX_WS;
+      if (payload[5]) ws_R = -ws_R;
+    }
+    if (payload[7] < 255) {
+      arm_lift = payload[7];
+      if (arm_lift < LIFT_RAISE_PWM) arm_lift = LIFT_RAISE_PWM;
+      else if (arm_lift > LIFT_LOWER_PWM) arm_lift = LIFT_LOWER_PWM;
+    }
+    if (payload[8] < 255) {
+      arm_tilt = payload[8];
+      if (arm_tilt < TILT_DOWN_PWM) arm_tilt = TILT_DOWN_PWM;
+      else if (arm_tilt > TILT_UP_PWM) arm_tilt = TILT_UP_PWM;
+    }
+    if (payload[9] < 255) {
+      arm_grip = payload[9];
+    }
   }
 }
 
 
-
-void print_state(states current_state){
-	switch(current_state){
-	case OFF:
-		display_write("OFF", DISPLAY_LINE_0);
-		break;
-	case DRIVING:
-		display_write("DRIVING", DISPLAY_LINE_0);
-		break;
-    }
-}
-
-void print_ws(void) {
+void update_display(void) {
   char buf[16] = {0};
-  snprintf(buf, 16, "L:%d  R:%d", ws_L, ws_R);
+  const char* state_str = "NULL";
+
+  switch(state){
+  case OFF:
+    state_str = "OFF";
+    break;
+  case DRIVING:
+    state_str = "RUN";
+    break;
+  }
+  snprintf(buf, 16, "%s  L:%d R:%d", state_str, ws_L, ws_R);
+	display_write(buf, DISPLAY_LINE_0);
+  snprintf(buf, 16, "L:%d T:%d G:%d", arm_lift, arm_tilt, arm_grip);
 	display_write(buf, DISPLAY_LINE_1);
 }
 
@@ -217,25 +276,42 @@ int main(void) {
   ws_L = 0;
   ws_R = 0;
   printf("Kobuki initialized!\n");
-  states state = OFF;
+  state = OFF;
 
   // BLE Scanning start
   scanning_start();
   printf("BLE Scanning enabled!\n");
 
+  // Init PWM2 generator
+  app_pwm_config_t pwm2_config = {
+  .pins ={BUCKLER_LED0, BUCKLER_LED1},
+  .pin_polarity = {APP_PWM_POLARITY_ACTIVE_HIGH, APP_PWM_POLARITY_ACTIVE_HIGH},
+  .num_of_channels = 2,
+  .period_us = PERIOD_PWM,
+  };
+  error_code = app_pwm_init(&PWM2, &pwm2_config, funny_function);
+  APP_ERROR_CHECK(error_code);
+  app_pwm_enable(&PWM2);
+
+  // Init arm location
+  arm_tilt = (TILT_UP_PWM + TILT_DOWN_PWM) / 2;
+  arm_lift = (LIFT_RAISE_PWM + LIFT_LOWER_PWM) / 2;
+  arm_grip = 0;
+  curr_arm_tilt = arm_tilt;
+  curr_arm_lift = arm_lift;
+
+
   // loop forever, running state machine
   while (1) {
     //XXX
-    //nrf_delay_ms(500);
+    nrf_delay_ms(10);
     // read sensors from robot
     kobukiSensorPoll(&sensors);
-    print_ws();
+    update_display();
 
     // state machine
     switch(state) {
       case OFF: {
-        print_state(state);
-
         // transition logic
         if (any_button_pressed()) {
           state = DRIVING;
@@ -243,12 +319,12 @@ int main(void) {
           state = OFF;
           // perform state-specific actions here
           kobukiDriveDirect(0, 0);
+          lift_to_pwm(0);
+          tilt_to_pwm(0);
         }
         break;
       }
       case DRIVING: {
-        print_state(state);
-
         // transition logic
         if (any_button_pressed()) {
           state = OFF;
@@ -256,6 +332,8 @@ int main(void) {
           state = DRIVING;
           // perform state-specific actions here
           kobukiDriveDirect(ws_L, ws_R);
+          lift_to_pwm(arm_lift);
+          tilt_to_pwm(arm_tilt);
         }
         break;
       }

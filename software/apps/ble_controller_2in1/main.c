@@ -45,14 +45,6 @@ struct tilt
   float phi;
 };
 
-/*
-void light_timer_callback() {
-    printf("Light timer fired!\n");
-    // TODO: implement this function!
-    // Use Simple BLE function to read light sensor and put data in advertisement
-}
-*/
-
 void read_tilt(struct tilt *result){
   lsm9ds1_measurement_t g = lsm9ds1_read_accelerometer();
   float x_val = g.x_axis;
@@ -157,6 +149,55 @@ void get_ws_smooth(struct tilt *tilt, int *ws_L, int* ws_R)
   *ws_R = (*ws_R) > CAP ? CAP : (((*ws_R) < -CAP) ? -CAP : *ws_R);
   *ws_L = (*ws_L) > CAP ? CAP : (((*ws_L) < -CAP) ? -CAP : *ws_L);
 }
+#undef X_DEADZ
+#undef Y_DEADZ
+
+/*
+ * Arm parameters
+ * XXX Kept in Sync with Robot's code 
+ */
+typedef enum {
+  LIFT_RAISE_PWM = 50,      // corresponds to 1ms
+  LIFT_LOWER_PWM = 90,      // corresponds to 1.8ms (1.9ms is wiping the floor)
+  TILT_UP_PWM = 95,        // corresponds to 1.9ms
+  TILT_DOWN_PWM = 70,      // corresponds to 1.4ms (1.2ms is fighting against lifter)
+} arm_state_pwm_t;
+const int arm_lift_neutral = (LIFT_RAISE_PWM + LIFT_LOWER_PWM) / 2;
+const int arm_tilt_neutral = (TILT_UP_PWM + TILT_DOWN_PWM) / 2;
+
+/*
+ * Get arm position from accel
+ */
+#define X_DEADZ 5
+#define Y_DEADZ 5
+void get_arm_pos(struct tilt *tilt, int *arm_lift, int* arm_tilt)
+{
+  // Lift
+  if (fabs(tilt->psi) <= Y_DEADZ) {
+    *arm_lift = arm_lift_neutral;
+  } else if (tilt->psi > 0) {
+    // Lower
+    *arm_lift = arm_lift_neutral + ((int) floor(tilt->psi - Y_DEADZ)) / 2;
+  } else {
+    // Higher
+    *arm_lift = arm_lift_neutral + ((int) floor(tilt->psi + Y_DEADZ)) / 2;
+  }
+  if (*arm_lift > LIFT_LOWER_PWM) *arm_lift = LIFT_LOWER_PWM;
+  if (*arm_lift < LIFT_RAISE_PWM) *arm_lift = LIFT_RAISE_PWM;
+
+  // Tilt
+  if (fabs(tilt->theta) <= X_DEADZ) {
+    *arm_tilt = arm_tilt_neutral;
+  } else if (tilt->theta > 0) {
+    // Up
+    *arm_tilt = arm_tilt_neutral + ((int) floor(tilt->theta - Y_DEADZ)) / 3;
+  } else {
+    // Down
+    *arm_tilt = arm_tilt_neutral + ((int) floor(tilt->theta + Y_DEADZ)) / 3;
+  }
+  if (*arm_tilt > TILT_UP_PWM) *arm_tilt = TILT_UP_PWM;
+  if (*arm_tilt < TILT_DOWN_PWM) *arm_tilt = TILT_DOWN_PWM;
+}
 
 /*
  * Display data on LCD
@@ -164,6 +205,14 @@ void get_ws_smooth(struct tilt *tilt, int *ws_L, int* ws_R)
 void display_ws(struct tilt *tilt, int ws_L, int ws_R) {
   char buf[16] = {0};
   snprintf(buf, 16, "L:%d  R:%d", ws_L, ws_R);
+  display_write(buf, DISPLAY_LINE_1);
+  snprintf(buf, 16, "Y:%d  X:%d", (int)tilt->psi, (int)tilt->theta);
+  display_write(buf, DISPLAY_LINE_0);
+}
+
+void display_arm(struct tilt *tilt, int arm_lift, int arm_tilt, int graper) {
+  char buf[16] = {0};
+  snprintf(buf, 16, "L:%d T:%d G:%d", arm_lift, arm_tilt, graper);
   display_write(buf, DISPLAY_LINE_1);
   snprintf(buf, 16, "Y:%d  X:%d", (int)tilt->psi, (int)tilt->theta);
   display_write(buf, DISPLAY_LINE_0);
@@ -183,7 +232,10 @@ int main(void) {
   struct tilt tilt_angle;
   int ws_L = 0;
   int ws_R = 0;
-  gpio_config(22,INPUT);
+  int arm_lift = arm_lift_neutral;
+  int arm_tilt = arm_tilt_neutral;
+  gpio_config(22, INPUT);
+
   // initialize RTT library
   error_code = NRF_LOG_INIT(NULL);
   APP_ERROR_CHECK(error_code);
@@ -218,27 +270,14 @@ int main(void) {
   printf("Display initialized!\n");
   display_write("INIT", DISPLAY_LINE_0);
 
-  /*
-  opt3004_config_t config = {
-    .range_number = OPT3004_AUTORANGE,
-    .conversion_time = OPT3004_CONVERSION_100MS,
-    .latch_interrupt = 1,
-    .interrupt_polarity = OPT3004_INTERRUPT_ACTIVE_LO,
-    .fault_count = OPT3004_FAULT_COUNT_1,
-  };
-
-  // initialize opt3004 driver
-  opt3004_init(&twi_mngr_instance);
-  error_code = opt3004_config(config);
-  // set up opt3004 to read continuously
-  opt3004_continuous();
-
-  printf("opt3004 initialized: %ld\n", error_code);
-  */
 
   // Setup BLE
+  #define BLE_ADV_SIZE 10
   simple_ble_app = simple_ble_init(&ble_config);
-  unsigned char payload[24] = {0};
+  unsigned char payload[BLE_ADV_SIZE] = {0};
+  for (int i=0; i<BLE_ADV_SIZE; i++) {
+    payload[i] = 0xFF;
+  }
 
   // Set a timer to read the light sensor and update advertisement data every second.
   /*
@@ -252,20 +291,24 @@ int main(void) {
     // read tilt
     read_tilt_avg(&tilt_angle);
     // printf("Xt: %d,  Yt: %d\n", (int)tilt_angle.theta, (int)tilt_angle.psi);
-    get_ws_smooth(&tilt_angle, &ws_L, &ws_R);
-    // printf("L: %d,  R: %d\n", ws_L, ws_R);
-    display_ws(&tilt_angle, ws_L, ws_R);
 
-    payload[0] = abs(ws_L);
-    payload[1] = (ws_L < 0) ? 1 : 0;
-    payload[2] = abs(ws_R);
-    payload[3] = (ws_R < 0) ? 1 : 0;
-  payload[4] = gpio_read(22);
-    simple_ble_adv_manuf_data(payload, 5);
-   
+    if (gpio_read(22)) {
+      get_ws_smooth(&tilt_angle, &ws_L, &ws_R);
+      display_ws(&tilt_angle, ws_L, ws_R);
+      // printf("L: %d,  R: %d\n", ws_L, ws_R);
+      payload[2] = abs(ws_L);
+      payload[3] = (ws_L < 0) ? 1 : 0;
+      payload[4] = abs(ws_R);
+      payload[5] = (ws_R < 0) ? 1 : 0;
+    } else {
+      get_arm_pos(&tilt_angle, &arm_lift, &arm_tilt);
+      display_arm(&tilt_angle, arm_lift, arm_tilt, 0);
+      payload[7] = arm_lift;
+      payload[8] = arm_tilt;
+      payload[9] = 0;
+    }
+    simple_ble_adv_manuf_data(&payload[2], BLE_ADV_SIZE);
     nrf_delay_ms(100);
-    // Sleep while SoftDevice handles BLE
-    //power_manage();
   }
 }
 
