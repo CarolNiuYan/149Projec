@@ -153,6 +153,14 @@ void get_ws_smooth(struct tilt *tilt, int *ws_L, int* ws_R)
 #undef Y_DEADZ
 #undef CAP
 
+bool button_pressed(void) {
+  if (!gpio_read(28)) {
+    nrf_delay_ms(100); //button de-bouncer
+    return true;
+  }
+  return false;
+}
+
 #if 0  //Not used for now
 /*
  * Arm parameters
@@ -263,7 +271,9 @@ int main(void) {
   //int arm_tilt = arm_tilt_neutral;
   int as_lift = 0;
   int as_tilt = 0;
+  bool as_grapper = 0;
   gpio_config(22, INPUT);
+  gpio_config(28, INPUT);
 
   // initialize RTT library
   error_code = NRF_LOG_INIT(NULL);
@@ -338,8 +348,9 @@ int main(void) {
         payload[8] = arm_tilt;
       */
       get_as(&tilt_angle, &as_lift, &as_tilt);
-      display_arm(&tilt_angle, as_lift, as_tilt, 0);
-      payload[9] = 0;
+      if (button_pressed()) as_grapper = !as_grapper;
+      display_arm(&tilt_angle, as_lift, as_tilt, as_grapper);
+      payload[9] = as_grapper;
       payload[10] = abs(as_lift);
       payload[11] = (as_lift < 0) ? 1 : 0;
       payload[12] = abs(as_tilt);

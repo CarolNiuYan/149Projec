@@ -34,6 +34,7 @@
 
 #define MAX_WS 130
 #define BKL_BT0 28
+#define BKL_LED2 23
 
 // I2C manager
 NRF_TWI_MNGR_DEF(twi_mngr_instance, 5, 0);
@@ -50,6 +51,7 @@ int as_lift = 0;
 int as_tilt = 0;
 uint16_t curr_arm_tilt;
 uint16_t curr_arm_lift;
+bool cur_arm_grip;
 
 // BLE configuration
 // This is mostly irrelevant since we are scanning only
@@ -105,9 +107,28 @@ void tilt_move(int arm_speed) {
     curr_arm_tilt -= arm_speed;
   }
   while (app_pwm_channel_duty_ticks_set(&PWM2, 1, curr_arm_tilt) == NRF_ERROR_BUSY);
-} 
+}
 
-
+// Grip action
+void update_grip(int grip) {
+  int i, pulse_width;
+  if (grip > 0 && !cur_arm_grip) {
+    pulse_width = GRIP_CLOSE;
+    cur_arm_grip = true;
+  } else if (grip == 0 && cur_arm_grip) {
+    pulse_width = GRIP_OPEN;
+    cur_arm_grip = false;
+  } else {
+    return;
+  }
+  // generate a short PWM signal
+  for (i=0; i<8; i++) {
+		gpio_set(BKL_LED2);
+		nrf_delay_us(pulse_width);
+		gpio_clear(BKL_LED2);
+		nrf_delay_us(BASE_WIDTH - pulse_width);
+	}
+}
 
 /*
  * BLE scanner callback
@@ -242,12 +263,12 @@ void update_display(void) {
     state_str = "RUN";
     break;
   }
-  snprintf(buf, 16, "%s  L:%d R:%d", state_str, ws_L, ws_R);
+  snprintf(buf, 16, "%s L%d R%d", state_str, ws_L, ws_R);
 	display_write(buf, DISPLAY_LINE_0);
   snprintf(buf, 16, "L:%d T:%d G:%d",
            curr_arm_lift / TICK_MULT,
            curr_arm_tilt / TICK_MULT,
-           arm_grip);
+           cur_arm_grip);
 	display_write(buf, DISPLAY_LINE_1);
 }
 
@@ -309,6 +330,8 @@ int main(void) {
 
   // Button input
   gpio_config(BKL_BT0, INPUT);
+  gpio_config(BKL_LED2, OUTPUT);
+  gpio_clear(BKL_LED2);
 
   // initialize Kobuki
   kobukiInit();
@@ -341,6 +364,7 @@ int main(void) {
   arm_grip = 0;
   curr_arm_tilt = arm_tilt * TICK_MULT;
   curr_arm_lift = arm_lift * TICK_MULT;
+  cur_arm_grip = false;
 
 
   // loop forever, running state machine
@@ -376,6 +400,7 @@ int main(void) {
           kobukiDriveDirect(ws_L, ws_R);
           lift_move(as_lift);
           tilt_move(as_tilt);
+          update_grip(arm_grip);
           /* (not used)
           lift_to_pwm(arm_lift);
           tilt_to_pwm(arm_tilt);

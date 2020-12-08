@@ -16,12 +16,13 @@ typedef enum {
 } states;
 
 typedef enum {
-  GRIP_OPEN = 490,       // this is actually 2.5 which corresponds to 0.5ms
-  GRIP_CLOSE = 2390,     // corresponds to 2.4ms
+  GRIP_OPEN = 510,       // corresponds to 0.5ms
+  GRIP_CLOSE = 2200,     // corresponds to 2.2ms (2.4ms is the limit)
   LIFT_RAISE = 1000,      // corresponds to 1ms
   LIFT_LOWER = 1890,      // this is actully 9.5 which corresponds to 1.9ms
   TILT_UP = 1890,        // this is actully 9.5 which corresponds to 1.9ms
-  TILT_DOWN = 1350,      // actual is  1.2ms 
+  TILT_DOWN = 1350,      // actual is  1.2ms
+  BASE_WIDTH = 20000,    // 50HZ
 } arm_state_t;
 
 typedef enum {
@@ -29,7 +30,7 @@ typedef enum {
   LIFT_LOWER_PWM = 90,      // corresponds to 1.8ms (1.9ms is wiping the floor)
   TILT_UP_PWM = 95,        // corresponds to 1.9ms
   TILT_DOWN_PWM = 70,      // corresponds to 1.4ms (1.2ms is fighting against lifter)
-  PERIOD_PWM = 2000,
+  PERIOD_PWM = 2000,       // 500HZ
 } arm_state_pwm_t;
 
 #define TICK_MULT 160
