@@ -26,7 +26,7 @@ static void open_control_room(unsigned short *port, int *server_socket_fd){
   }
 }
 
-// connect to an existing game room
+// connect to an existing control room
 // return the opponent socket fd
 static void join_control_room(char *peer_hostname, unsigned short peer_port, int *socket_fd) {
   *socket_fd = socket_connect(peer_hostname, peer_port);
@@ -50,31 +50,24 @@ static void accept_connection(int server_socket_fd, int *client_socket_fd) {
 
 // receive other's input: TBD
 // if fail to get input, set offline to true
-static void* get_client_input(int client_socket_fd) {
+static void* get_client_input(int client_socket_fd, float *client_msg) {
   ssize_t rc;
   while(1) {
-    int x, y, z;
-    rc = read(client_socket_fd, &x, sizeof(int));
+    float x, y, z;
+    rc = read(client_socket_fd, &x, sizeof(float));
     if (rc==-1 || rc==0) {
         // Handle cases that the opponent is offline
         close(client_socket_fd);
         break;
     }
-    rc = read(client_socket_fd, &y, sizeof(int));
+    client_msg[0] = rc;
+    rc = read(client_socket_fd, &y, sizeof(float));
     if (rc==-1 || rc==0) {
         // Handle cases that the opponent is offline
         close(client_socket_fd);
         break;
     }
-    rc = read(client_socket_fd, &z, sizeof(int));
-    if (rc==-1 || rc==0) {
-        // Handle cases that the opponent is offline
-        close(client_socket_fd);
-        break;
-    }
-    printf("the x value is %d\n", x);
-    printf("the y value is %d\n", y);
-    printf("the z value is %d\n", z);
+    client_msg[1] = rc;
   }
   return NULL;
 }
@@ -83,20 +76,15 @@ static void* get_client_input(int client_socket_fd) {
 // if we quit, send -1
 // if cannot send, we think opponent quitted, return -1
 // On success, return 0 
-static int send_input(int client_fd, int x, int y, int z) {
+static int send_input(int client_fd, float x, float y) {
   ssize_t rc;
   // Send coordinates of piece to opponent
-  rc=write(client_fd,&x,sizeof(int));
+  rc=write(client_fd,&x,sizeof(float));
   if (rc==-1) {
     close(client_fd);
     return -1;
   }
-  rc=write(client_fd,&y,sizeof(int));
-  if (rc==-1) {
-    close(client_fd);
-    return -1;
-  }
-  rc=write(client_fd,&z,sizeof(int));
+  rc=write(client_fd,&y,sizeof(float));
   if (rc==-1) {
     close(client_fd);
     return -1;

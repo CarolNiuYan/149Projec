@@ -33,6 +33,7 @@ int main (int argc, char** argv) {
   	int server_socket_fd;
   	unsigned short server_port;
   	int socket_fd;
+  	int client_msg[3];
 
   	// Check whether we want to connect to other control room
   	if(argc == 3) {
@@ -50,10 +51,16 @@ int main (int argc, char** argv) {
       // Initialize the home game
       open_control_room(&server_port, &server_socket_fd);
 
-      printf("Try to init home\n");
       // Initialize the home game display
       init_home(server_port);
       // Accept connection
       accept_connection(server_socket_fd, &socket_fd);
-  }
+  	}
+
+  	// Transmit signals 
+  	if(host) {
+  		get_client_input(socket_fd);
+  	} else {
+  		send_input(socket_fd, 33, 42, 52);
+  	}
 }
