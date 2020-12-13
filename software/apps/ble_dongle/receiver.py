@@ -5,6 +5,7 @@ import asyncio
 from bleak import BleakScanner
 
 scanner = BleakScanner()
+loop = asyncio.get_event_loop()
 
 """
 def detection_callback(*args):
@@ -37,9 +38,20 @@ async def run():
             continue
         # This is the mfg data (without the leading 2-byte mfg id)
         # No idea what is 736
-        print(d.metadata['manufacturer_data'][736])
+        return d.metadata['manufacturer_data'][736]
 
-print("Now sanning....")
-loop = asyncio.get_event_loop()
-loop.run_until_complete(run())
+# print("Now sanning....")
 
+def get_adv():
+    ret = loop.run_until_complete(run())
+    if not ret:
+        print("Invalid return value from async run")
+        return [255]*24
+    if len(ret) != 24:
+        print("Invalid return length from async run %d" % len(ret))
+        return [255]*24
+    return ret
+
+if __name__ == '__main__':
+    # main_test_changing_ws()
+    print(get_adv())
