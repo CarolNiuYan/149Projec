@@ -3,6 +3,7 @@
 
 import asyncio
 from bleak import BleakScanner
+import time
 
 scanner = BleakScanner()
 loop = asyncio.get_event_loop()
@@ -27,9 +28,10 @@ async def run():
     """
     while(1):
         # timeout < 1 seems not very stable on my system
-        d = await scanner.find_device_by_address("C0:98:E5:49:53:54", timeout=2)
+        d = await scanner.find_device_by_address("C0:98:E5:49:53:54", timeout=10)
         if not d:
             # Device not found,
+            time.sleep(1)
             continue
         if ('manufacturer_data' not in d.metadata) or \
            (d.metadata['manufacturer_data'] is None) or \
