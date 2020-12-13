@@ -29,7 +29,7 @@ def set_broadcast_advdata(data):
     print("Set Data")
     # base_cmd = ['hcitool', '-i', 'hci0', 'cmd', '0x08', '0x0008', '11', '02', '01', '1a', '0d', 'ff']
     # set_broadcast_advdata(['E0', '02', '48', '45', '4c', '4c', '4f', '57', '4f', '52', '4c', '44'])
-    base_cmd = ['hcitool', '-i', 'hci0', 'cmd', '0x08', '0x0008', '1f', '02', '01', '06', '1b', 'ff']
+    base_cmd = ['hcitool', '-i', 'hci0', 'cmd', '0x08', '0x0008', '1f', '02', '01', '06', '1b', 'ff', 'e0', '02']
     base_cmd.extend(data)
     subprocess.run(base_cmd)
     time.sleep(0.1)
