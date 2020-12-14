@@ -34,6 +34,7 @@
 
 #define MAX_WS 130
 #define BKL_BT0 28
+#define BKL_SW0 22
 #define BKL_LED2 23
 
 // I2C manager
@@ -75,13 +76,14 @@ void funny_function(uint32_t pwm_id) { /*Do nothing*/ }
 
 
 // Arm Actions
+#define PWM_CG_SPD 50
 void lift_to_pwm(int pwm) {
   if (!pwm) {
     while (app_pwm_channel_duty_set(&PWM2, 0, 0) == NRF_ERROR_BUSY);
     return;
   }
-  if (curr_arm_lift < pwm * TICK_MULT) curr_arm_lift+=100;
-  else if (curr_arm_lift > pwm * TICK_MULT) curr_arm_lift-=100;
+  if (curr_arm_lift < pwm * TICK_MULT) curr_arm_lift+=PWM_CG_SPD;
+  else if (curr_arm_lift > pwm * TICK_MULT) curr_arm_lift-=PWM_CG_SPD;
   while (app_pwm_channel_duty_ticks_set(&PWM2, 0, curr_arm_lift) == NRF_ERROR_BUSY);
 }
 void tilt_to_pwm(int pwm) {
@@ -89,8 +91,8 @@ void tilt_to_pwm(int pwm) {
     while (app_pwm_channel_duty_set(&PWM2, 1, 0) == NRF_ERROR_BUSY);
     return;
   }
-  if (curr_arm_tilt < pwm * TICK_MULT) curr_arm_tilt+=100;
-  else if (curr_arm_tilt > pwm * TICK_MULT) curr_arm_tilt-=100;
+  if (curr_arm_tilt < pwm * TICK_MULT) curr_arm_tilt+=PWM_CG_SPD;
+  else if (curr_arm_tilt > pwm * TICK_MULT) curr_arm_tilt-=PWM_CG_SPD;
   while (app_pwm_channel_duty_ticks_set(&PWM2, 1, curr_arm_tilt) == NRF_ERROR_BUSY);
 }
 
@@ -224,7 +226,6 @@ void ble_evt_adv_report(ble_evt_t const* p_ble_evt) {
     /*
      * Arm actions
      */
-    /* (Not used)
     if (payload[7] < 255) {
       arm_lift = payload[7];
       if (arm_lift < LIFT_RAISE_PWM) arm_lift = LIFT_RAISE_PWM;
@@ -235,7 +236,6 @@ void ble_evt_adv_report(ble_evt_t const* p_ble_evt) {
       if (arm_tilt < TILT_DOWN_PWM) arm_tilt = TILT_DOWN_PWM;
       else if (arm_tilt > TILT_UP_PWM) arm_tilt = TILT_UP_PWM;
     }
-    */
     if (payload[9] < 255) {
       arm_grip = payload[9];
     }
@@ -330,6 +330,7 @@ int main(void) {
 
   // Button input
   gpio_config(BKL_BT0, INPUT);
+  gpio_config(BKL_SW0, INPUT);
   gpio_config(BKL_LED2, OUTPUT);
   gpio_clear(BKL_LED2);
 
@@ -398,13 +399,16 @@ int main(void) {
           state = DRIVING;
           // perform state-specific actions here
           kobukiDriveDirect(ws_L, ws_R);
-          lift_move(as_lift);
-          tilt_move(as_tilt);
+          if (gpio_read(BKL_SW0)) {
+            // Relative movement
+            lift_move(as_lift);
+            tilt_move(as_tilt);
+          } else {
+            // Move to abs. position
+            lift_to_pwm(arm_lift);
+            tilt_to_pwm(arm_tilt);
+          }
           update_grip(arm_grip);
-          /* (not used)
-          lift_to_pwm(arm_lift);
-          tilt_to_pwm(arm_tilt);
-          */
         }
         break;
       }
