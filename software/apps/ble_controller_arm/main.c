@@ -161,14 +161,13 @@ bool button_pressed(void) {
   return false;
 }
 
-#if 0  //Not used for now
 /*
  * Arm parameters
  * XXX Kept in Sync with Robot's code 
  */
 typedef enum {
   LIFT_RAISE_PWM = 50,      // corresponds to 1ms
-  LIFT_LOWER_PWM = 90,      // corresponds to 1.8ms (1.9ms is wiping the floor)
+  LIFT_LOWER_PWM = 87,      // corresponds to 1.8ms (1.9ms is wiping the floor)
   TILT_UP_PWM = 95,        // corresponds to 1.9ms
   TILT_DOWN_PWM = 70,      // corresponds to 1.4ms (1.2ms is fighting against lifter)
 } arm_state_pwm_t;
@@ -208,7 +207,8 @@ void get_arm_pos(struct tilt *tilt, int *arm_lift, int* arm_tilt)
   if (*arm_tilt > TILT_UP_PWM) *arm_tilt = TILT_UP_PWM;
   if (*arm_tilt < TILT_DOWN_PWM) *arm_tilt = TILT_DOWN_PWM;
 }
-#endif
+#undef X_DEADZ
+#undef Y_DEADZ
 
 /*
  * Get arm speed (in ticks) from tilt
@@ -267,12 +267,13 @@ int main(void) {
   struct tilt tilt_angle;
   int ws_L = 0;
   int ws_R = 0;
-  //int arm_lift = arm_lift_neutral;
-  //int arm_tilt = arm_tilt_neutral;
+  int arm_lift = arm_lift_neutral;
+  int arm_tilt = arm_tilt_neutral;
   int as_lift = 0;
   int as_tilt = 0;
   bool as_grapper = 0;
   int i;
+  int nothing;
   gpio_config(22, INPUT);
   gpio_config(28, INPUT);
 
@@ -333,31 +334,19 @@ int main(void) {
     // printf("Xt: %d,  Yt: %d\n", (int)tilt_angle.theta, (int)tilt_angle.psi);
 
     if (gpio_read(22)) {
-      get_ws_smooth(&tilt_angle, &ws_L, &ws_R);
-      display_ws(&tilt_angle, ws_L, ws_R);
-      // printf("L: %d,  R: %d\n", ws_L, ws_R);
-      payload[2] = abs(ws_L);
-      payload[3] = (ws_L < 0) ? 1 : 0;
-      payload[4] = abs(ws_R);
-      payload[5] = (ws_R < 0) ? 1 : 0;
-      for (i=6; i<14; i++) {payload[i] = 0xFF;}
+      get_arm_pos(&tilt_angle, &arm_lift, &nothing);
+      payload[8] = 0xFF;
+      payload[7] = arm_lift;
+      payload[9] = 0xFF;
+      display_arm(&tilt_angle, arm_lift, -1, -1);
+
     } else {
-      /*
-       * (Not used)
-        get_arm_pos(&tilt_angle, &arm_lift, &arm_tilt);
-        display_arm(&tilt_angle, arm_lift, arm_tilt, 0);
-        payload[7] = arm_lift;
-        payload[8] = arm_tilt;
-      */
-      get_as(&tilt_angle, &as_lift, &as_tilt);
+      get_arm_pos(&tilt_angle, &nothing, &arm_tilt);
+      payload[7] = 0xFF;
+      payload[8] = arm_tilt;
       if (button_pressed()) as_grapper = !as_grapper;
-      display_arm(&tilt_angle, as_lift, as_tilt, as_grapper);
+      display_arm(&tilt_angle, -1, arm_tilt, as_grapper);
       payload[9] = as_grapper;
-      payload[10] = abs(as_lift);
-      payload[11] = (as_lift < 0) ? 1 : 0;
-      payload[12] = abs(as_tilt);
-      payload[13] = (as_tilt < 0) ? 1 : 0;
-      for (i=2; i<=6; i++) {payload[i] = 0xFF;}
     }
     simple_ble_adv_manuf_data(&payload[2], BLE_ADV_SIZE - 2);
     nrf_delay_ms(100);
