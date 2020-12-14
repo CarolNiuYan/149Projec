@@ -272,6 +272,7 @@ int main(void) {
   int as_lift = 0;
   int as_tilt = 0;
   bool as_grapper = 0;
+  int i;
   gpio_config(22, INPUT);
   gpio_config(28, INPUT);
 
@@ -314,7 +315,7 @@ int main(void) {
   #define BLE_ADV_SIZE 16
   simple_ble_app = simple_ble_init(&ble_config);
   unsigned char payload[BLE_ADV_SIZE] = {0};
-  for (int i=0; i<BLE_ADV_SIZE; i++) {
+  for (i=0; i<BLE_ADV_SIZE; i++) {
     payload[i] = 0xFF;
   }
 
@@ -339,6 +340,7 @@ int main(void) {
       payload[3] = (ws_L < 0) ? 1 : 0;
       payload[4] = abs(ws_R);
       payload[5] = (ws_R < 0) ? 1 : 0;
+      for (i=6; i<14; i++) {payload[i] = 0xFF;}
     } else {
       /*
        * (Not used)
@@ -354,7 +356,8 @@ int main(void) {
       payload[10] = abs(as_lift);
       payload[11] = (as_lift < 0) ? 1 : 0;
       payload[12] = abs(as_tilt);
-      payload[13] = (as_tilt < 0) ? 1 : 0; 
+      payload[13] = (as_tilt < 0) ? 1 : 0;
+      for (i=2; i<=6; i++) {payload[i] = 0xFF;}
     }
     simple_ble_adv_manuf_data(&payload[2], BLE_ADV_SIZE - 2);
     nrf_delay_ms(100);

@@ -16,7 +16,8 @@ def stop_broadcasting():
 
 def set_broadcast_rate():
     print("Set Rate")
-    subprocess.run("hcitool -i hci0 cmd 0x08 0x0006 A0 00 A0 00 03 00 00 00 00 00 00 00 00 07 00", shell=True)
+    # subprocess.run("hcitool -i hci0 cmd 0x08 0x0006 A0 00 A0 00 03 00 00 00 00 00 00 00 00 07 00", shell=True)
+    subprocess.run("hcitool -i hci0 cmd 0x08 0x0006 00 01 00 01 03 00 00 00 00 00 00 00 00 07 00", shell=True)
     time.sleep(0.1)
 
 def set_mac_address():
@@ -60,7 +61,7 @@ def main_test_changing_ws():
     start_broadcasting()
     for _ in range(50):
         print("===DATA-2 is %s" % payload[2])
-        set_broadcast_advdata(payload)
+        set_broadcast_advdata(payload[2:])
         time.sleep(0.1)
         lw_speed += 1
         payload[2] = "{:02x}".format(lw_speed)
@@ -81,7 +82,7 @@ def main_test_arm_lift():
     start_broadcasting()
     for _ in range(10):
         print("===DATA-11 is %s" % data[11])
-        set_broadcast_advdata(data)
+        set_broadcast_advdata(data[2:])
         time.sleep(3)
         if data[11] == '01':
             data[11] = '00'
@@ -92,8 +93,8 @@ def main_test_arm_lift():
     print("END")
 
 if __name__ == '__main__':
-    # main_test_changing_ws()
-    main_test_arm_lift()
+    main_test_changing_ws()
+    # main_test_arm_lift()
 
 
 

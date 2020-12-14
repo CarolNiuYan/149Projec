@@ -24,6 +24,7 @@ print("\n Listning on port: " + str(PORT))
 
 client_socket, (client_ip, client_port) = server_socket.accept()
 print("\n Client" + client_ip + "connected successfully\n")
+quit_accu = 0
 
 while True:
 	in_payload = client_socket.recv(104)
@@ -32,11 +33,16 @@ while True:
 	payload = in_payload.split()
 	print(payload)
 	if len(payload) != 24:
-		print("Wrong length, skip")
+		if quit_accu > 5:
+			break
+		print("Wrong length, skip %d" % quit_accu)
+		quit_accu += 1
 		time.sleep(0.100)
 		continue
 
 	bc.set_broadcast_advdata(payload)
 	time.sleep(0.100)
 
+print("Now Exit")
+bc.stop_broadcasting()
 client_socket.close()
